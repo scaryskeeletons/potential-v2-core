@@ -1,49 +1,101 @@
-pragma solidity =0.5.16;
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity 0.8.26;
 
-import './interfaces/IUniswapV2Factory.sol';
-import './UniswapV2Pair.sol';
+import {UniswapV2Pair} from "./UniswapV2Pair.sol";
 
-contract UniswapV2Factory is IUniswapV2Factory {
-    address public feeTo;
-    address public feeToSetter;
+/// @notice deterministic factory restricted to canonical potential launches.
+contract UniswapV2Factory {
+    address public owner;
+    address public pendingOwner;
+    address public pairCreator;
+    address public treasury;
+    bool public initialized;
 
     mapping(address => mapping(address => address)) public getPair;
     address[] public allPairs;
 
-    event PairCreated(address indexed token0, address indexed token1, address pair, uint);
+    event PairCreated(address indexed token0, address indexed token1, address pair, uint256 index);
+    event PairCreatorUpdated(address indexed previousCreator, address indexed newCreator);
+    event OwnershipTransferStarted(address indexed owner, address indexed pendingOwner);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
-    constructor(address _feeToSetter) public {
-        feeToSetter = _feeToSetter;
+    error Forbidden();
+    error InvalidConfiguration();
+    error PairExists();
+
+    function initialize(address owner_, address treasury_) external {
+        if (initialized) revert Forbidden();
+        if (owner_ == address(0) || treasury_ == address(0) || owner_ == treasury_) {
+            revert InvalidConfiguration();
+        }
+        initialized = true;
+        owner = owner_;
+        treasury = treasury_;
+        emit OwnershipTransferred(address(0), owner_);
     }
 
-    function allPairsLength() external view returns (uint) {
+    function allPairsLength() external view returns (uint256) {
         return allPairs.length;
     }
 
-    function createPair(address tokenA, address tokenB) external returns (address pair) {
-        require(tokenA != tokenB, 'UniswapV2: IDENTICAL_ADDRESSES');
-        (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
-        require(token0 != address(0), 'UniswapV2: ZERO_ADDRESS');
-        require(getPair[token0][token1] == address(0), 'UniswapV2: PAIR_EXISTS'); // single check is sufficient
-        bytes memory bytecode = type(UniswapV2Pair).creationCode;
-        bytes32 salt = keccak256(abi.encodePacked(token0, token1));
-        assembly {
-            pair := create2(0, add(bytecode, 32), mload(bytecode), salt)
+    function setPairCreator(address newCreator) external {
+        if (msg.sender != owner || newCreator == address(0)) revert Forbidden();
+        address previous = pairCreator;
+        pairCreator = newCreator;
+        emit PairCreatorUpdated(previous, newCreator);
+    }
+
+    function transferOwnership(address newOwner) external {
+        if (msg.sender != owner || newOwner == address(0) || newOwner == treasury) {
+            revert Forbidden();
         }
-        IUniswapV2Pair(pair).initialize(token0, token1);
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(owner, newOwner);
+    }
+
+    function acceptOwnership() external {
+        if (msg.sender != pendingOwner) revert Forbidden();
+        address previous = owner;
+        owner = msg.sender;
+        pendingOwner = address(0);
+        emit OwnershipTransferred(previous, msg.sender);
+    }
+
+    function createPair(
+        address tokenA,
+        address tokenB,
+        address quoteToken,
+        address activationAuthority,
+        address creatorRecipient,
+        uint16 lpFeeBps,
+        uint16 protocolFeeBps,
+        uint16 creatorFeeBps
+    ) external returns (address pair) {
+        if (msg.sender != pairCreator) revert Forbidden();
+        if (tokenA == tokenB) revert InvalidConfiguration();
+        (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
+        if (token0 == address(0) || quoteToken != token0 && quoteToken != token1) {
+            revert InvalidConfiguration();
+        }
+        if (getPair[token0][token1] != address(0)) revert PairExists();
+        bytes32 salt = keccak256(abi.encodePacked(token0, token1));
+        pair = address(new UniswapV2Pair{salt: salt}());
+        UniswapV2Pair(pair)
+            .initialize(
+                token0,
+                token1,
+                quoteToken,
+                msg.sender,
+                activationAuthority,
+                treasury,
+                creatorRecipient,
+                lpFeeBps,
+                protocolFeeBps,
+                creatorFeeBps
+            );
         getPair[token0][token1] = pair;
-        getPair[token1][token0] = pair; // populate mapping in the reverse direction
+        getPair[token1][token0] = pair;
         allPairs.push(pair);
         emit PairCreated(token0, token1, pair, allPairs.length);
-    }
-
-    function setFeeTo(address _feeTo) external {
-        require(msg.sender == feeToSetter, 'UniswapV2: FORBIDDEN');
-        feeTo = _feeTo;
-    }
-
-    function setFeeToSetter(address _feeToSetter) external {
-        require(msg.sender == feeToSetter, 'UniswapV2: FORBIDDEN');
-        feeToSetter = _feeToSetter;
     }
 }
