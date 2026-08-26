@@ -23,6 +23,10 @@ contract UniswapV2Factory {
     error InvalidConfiguration();
     error PairExists();
 
+    constructor() {
+        initialized = true;
+    }
+
     function initialize(address owner_, address treasury_) external {
         if (initialized) revert Forbidden();
         if (owner_ == address(0) || treasury_ == address(0) || owner_ == treasury_) {
