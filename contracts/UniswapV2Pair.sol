@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.8.26;
+pragma solidity ^0.8.26;
 
 import {PotentialFeeMath} from "./libraries/PotentialFeeMath.sol";
 import {PotentialV2Liquidity} from "./PotentialV2Liquidity.sol";

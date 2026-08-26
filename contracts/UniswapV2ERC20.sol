@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.8.26;
+pragma solidity ^0.8.26;
 
 /// @notice uniswap v2 lp token surface retained for potential pairs.
 contract UniswapV2ERC20 {
