@@ -1,13 +1,15 @@
 [profile.default]
 src = "contracts"
-test = "test-sol"
+test = "test/foundry"
 out = "out"
-solc = "0.8.26"
-evm_version = "cancun"
+libs = ["../../contracts/lib"]
+auto_detect_solc = true
+evm_version = "istanbul"
 optimizer = true
 optimizer_runs = 200
-bytecode_hash = "none"
-cbor_metadata = false
+
+[profile.default.fuzz]
+runs = 1_000
 
 [fmt]
 line_length = 100
